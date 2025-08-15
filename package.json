@@ -28,5 +28,9 @@
     "ethers": "^6.15.0",
     "pinata": "^2.4.9",
     "web3": "^4.16.0"
+  },
+  "devDependencies": {
+    "ganache": "^7.9.2",
+    "truffle": "^5.11.5"
   }
 }
