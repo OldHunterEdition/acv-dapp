@@ -1,6 +1,6 @@
 <script>
   import { onMount } from "svelte";
-  import { ethers, keccak256 } from "ethers";
+  import { ethers, keccak256, toUtf8Bytes } from "ethers";
   import { CERT_REGISTRY_ABI } from "../lib/abi";
   import { PinataSDK } from "pinata";
 
@@ -112,7 +112,9 @@
 
     // take the cid from res and call issue method from smart contract
     const cid = res.cid;
-    const contentHash = keccak256(signature);
+    const contentHash = keccak256(
+      toUtf8Bytes(JSON.stringify(certificate_info))
+    );
     const credentialID = credentialId;
     contract = new ethers.Contract(
       import.meta.env.VITE_CONTRACT_ADDRESS,
