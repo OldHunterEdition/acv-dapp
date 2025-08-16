@@ -8,10 +8,8 @@ contract CertRegistry is AccessControl {
     using ECDSA for bytes32;
     bytes32 public constant ISSUER_ROLE = keccak256("ISSUER_ROLE");
 
-    // EIP-712 domain separator
     bytes32 private immutable DOMAIN_SEPARATOR;
 
-    // keccak256("Verify(address signer,string message)")
     bytes32 private constant VERIFY_TYPEHASH =
         keccak256("Verify(address signer,string message)");
 
@@ -49,12 +47,11 @@ contract CertRegistry is AccessControl {
         _grantRole(ISSUER_ROLE, admin);
         DOMAIN_SEPARATOR = keccak256(
             abi.encode(
-                // EIP712Domain(string name,string version,uint256 chainId,address verifyingContract)
                 keccak256(
                     "EIP712Domain(string name,string version,uint256 chainId,address verifyingContract)"
                 ),
-                keccak256(bytes("CredentialChecker")), // name
-                keccak256(bytes("1")), // version
+                keccak256(bytes("CredentialChecker")),
+                keccak256(bytes("1")),
                 block.chainid,
                 address(this)
             )
