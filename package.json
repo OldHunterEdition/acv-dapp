@@ -27,6 +27,7 @@
     "dotenv": "^17.2.1",
     "ethers": "^6.15.0",
     "pinata": "^2.4.9",
+    "svelte-spa-router": "^4.0.1",
     "web3": "^4.16.0"
   },
   "devDependencies": {
