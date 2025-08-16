@@ -96,7 +96,9 @@
 
       // Store on-chain: contentHash = keccak256(signature)
       const cid = res.cid;
-      const contentHash = keccak256(signature);
+      const contentHash = keccak256(
+        toUtf8Bytes(JSON.stringify(certificate_info))
+      );
 
       const write = new ethers.Contract(
         import.meta.env.VITE_CONTRACT_ADDRESS,
