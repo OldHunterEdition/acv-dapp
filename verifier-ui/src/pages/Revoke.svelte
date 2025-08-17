@@ -13,60 +13,76 @@
   let loading = false;
   let result = null;
 
-  const EXPECTED_CHAIN_ID = 1337;
+  const IS_LOCAL = import.meta.env.VITE_BLOCKCHAIN_NETWORK === "local";
   const CONTRACT_ADDR = import.meta.env.VITE_CONTRACT_ADDRESS;
-  const NETWORK_KIND = import.meta.env.VITE_BLOCKCHAIN_NETWORK;
   const PRIVATE_KEY = import.meta.env.VITE_PRIVATE_KEY;
+  const EXPECTED_CHAIN_ID_ENV = import.meta.env.VITE_EXPECTED_CHAIN_ID || null;
 
-  async function getProvider() {
-    if (NETWORK_KIND == "local") {
+  function parseExpectedChainId(val) {
+    if (!val) return undefined;
+    return String(val).startsWith("0x") ? parseInt(val, 16) : Number(val);
+  }
+  const EXPECTED_CHAIN_ID = parseExpectedChainId(EXPECTED_CHAIN_ID_ENV);
+  const toHexChainId = (n) => "0x" + Number(n).toString(16);
+
+  async function getReadProvider() {
+    if (IS_LOCAL && PRIVATE_KEY) {
       return new ethers.JsonRpcProvider("http://127.0.0.1:8545");
-    } else {
-      const eth = typeof window !== "undefined" ? window["ethereum"] : null;
-      if (eth) {
-        const p = new ethers.BrowserProvider(eth);
-        const net = await p.getNetwork();
-        if (EXPECTED_CHAIN_ID && Number(net.chainId) !== Number(EXPECTED_CHAIN_ID)) {
-          try {
-            await eth.request({
-              method: "wallet_switchEthereumChain",
-              params: [{ chainId: "0x" + EXPECTED_CHAIN_ID.toString(16) }],
-            });
-          } catch (_) {}
-        }
-        return p;
-      }
-      throw new Error("No RPC or wallet found.");
     }
+    if (window.ethereum) {
+      const p = new ethers.BrowserProvider(window.ethereum);
+      if (EXPECTED_CHAIN_ID) {
+        const net = await p.getNetwork();
+        if (Number(net.chainId) !== Number(EXPECTED_CHAIN_ID)) {
+          await window.ethereum.request({
+            method: "wallet_switchEthereumChain",
+            params: [{ chainId: toHexChainId(EXPECTED_CHAIN_ID) }],
+          });
+        }
+      }
+      return p;
+    }
+    if (IS_LOCAL) return new ethers.JsonRpcProvider("http://127.0.0.1:8545");
+    throw new Error("No RPC or wallet found.");
   }
 
-  function makeCertId(studentID, first, last) {
-    const full = `${first} ${last}`;
-    return ethers.solidityPackedKeccak256(["string", "string"], [studentID, full]);
+  async function getWriteSigner() {
+    if (IS_LOCAL && PRIVATE_KEY) {
+      const rpc = new ethers.JsonRpcProvider("http://127.0.0.1:8545");
+      return new ethers.Wallet(PRIVATE_KEY, rpc);
+    }
+    if (!window.ethereum) throw new Error("No wallet found in browser (MetaMask).");
+    await window.ethereum.request({ method: "eth_requestAccounts" });
+    const p = new ethers.BrowserProvider(window.ethereum);
+    if (EXPECTED_CHAIN_ID) {
+      const net = await p.getNetwork();
+      if (Number(net.chainId) !== Number(EXPECTED_CHAIN_ID)) {
+        await window.ethereum.request({
+          method: "wallet_switchEthereumChain",
+          params: [{ chainId: toHexChainId(EXPECTED_CHAIN_ID) }],
+        });
+      }
+    }
+    return p.getSigner();
   }
 
+  // main actions
   async function revoke() {
     loading = true;
     result = null;
     try {
-      // validations
       if (!studentID || !FirstName || !LastName) {
         throw new Error("Fill Student ID, First Name, and Last Name.");
       }
       if (!reason.trim()) {
         throw new Error("Please provide a revoke reason.");
       }
-      if (!(NETWORK_KIND == "local" && PRIVATE_KEY)) {
-        throw new Error("Revoking requires local mode with VITE_PRIVATE_KEY.");
-      }
 
       const certId = makeCertId(studentID, FirstName, LastName);
 
-      // check contract deployed
       const code = await provider.getCode(CONTRACT_ADDR);
       if (!code || code === "0x") throw new Error("No contract at VITE_CONTRACT_ADDRESS on this chain.");
 
-      // current status
       const existsActive = await contract.isActive(certId);
       const statusBefore = await contract.statusOf(certId);
       if (!existsActive) {
@@ -77,21 +93,18 @@
         return;
       }
 
-      // signer must have ISSUER_ROLE
+      const signer = await getWriteSigner();
       const issuerRole = await contract.ISSUER_ROLE();
-      const signer = new ethers.Wallet(PRIVATE_KEY, provider);
       const signerAddr = await signer.getAddress();
       const hasRole = await contract.hasRole(issuerRole, signerAddr);
       if (!hasRole) {
         throw new Error(`Signer ${signerAddr} lacks ISSUER_ROLE and cannot revoke.`);
       }
 
-      // send tx
       const write = new ethers.Contract(CONTRACT_ADDR, CERT_REGISTRY_ABI, signer);
-      const tx = await write.revoke(certId, reason /* string */, { gasLimit: 500_000 });
+      const tx = await write.revoke(certId, reason, { gasLimit: 500_000 });
       const rcpt = await tx.wait();
 
-      // read status after
       const statusAfter = await contract.statusOf(certId);
       const isActiveAfter = await contract.isActive(certId);
 
@@ -109,8 +122,9 @@
     }
   }
 
+  // init
   onMount(async () => {
-    provider = await getProvider();
+    provider = await getReadProvider();
     const code = await provider.getCode(CONTRACT_ADDR);
     if (!code || code === "0x") {
       throw new Error("No contract deployed at this address on the current chain.");
