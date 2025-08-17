@@ -1,19 +1,12 @@
 <script>
-  import Verifier from "./pages/Verifier.svelte";
-  import University from "./pages/University.svelte";
+  import Router from "svelte-spa-router";
+  import Home from "./Home.svelte";
+  import Student from "./pages/Student.svelte";
 
-  let currentPage = "university"; // default page
+  const routes = {
+    "/": Home,
+    "/student": Student,
+  };
 </script>
 
-<nav>
-  <button on:click={() => (currentPage = "university")}>University</button>
-  <button on:click={() => (currentPage = "verifier")}>Verifier</button>
-</nav>
-
-<main>
-  {#if currentPage === "university"}
-    <University />
-  {:else if currentPage === "verifier"}
-    <Verifier />
-  {/if}
-</main>
+<Router {routes} />

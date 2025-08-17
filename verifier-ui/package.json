@@ -16,6 +16,7 @@
   "dependencies": {
     "ethers": "^6.15.0",
     "pinata": "^2.4.9",
+    "qrcode": "^1.5.4",
     "svelte-spa-router": "^4.0.1"
   }
 }

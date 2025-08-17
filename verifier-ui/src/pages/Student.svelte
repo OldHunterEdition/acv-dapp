@@ -12,13 +12,16 @@
   let isNotFound = false;
 
   onMount(async () => {
-    cid = new URLSearchParams(window.location.search).get("cid");
+    const hash = window.location.hash;
+    const queryString = hash.split("?")[1];
+    cid = new URLSearchParams(queryString).get("cid");
 
     if (!cid) {
       isNotFound = true;
     }
     try {
       const uri = `https://${import.meta.env.VITE_PINATA_GATEWAY}/ipfs/${cid}`;
+      console.log(`uri: ${uri}`);
       const res = await fetch(uri, { method: "GET" });
 
       if (!res.ok) {
