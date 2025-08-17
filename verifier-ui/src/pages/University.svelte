@@ -121,11 +121,9 @@
       };
       const signature = await signer.signTypedData(domain, types, value);
 
-      // Attach signature, pin to Pinata to obtain CID
       certificate_info.signature = signature;
       const res = await pinata.upload.public.json(certificate_info);
 
-      // Store on-chain: contentHash = keccak256(signature)
       const cid = res.cid;
       const contentHash = keccak256(
         toUtf8Bytes(JSON.stringify(certificate_info))

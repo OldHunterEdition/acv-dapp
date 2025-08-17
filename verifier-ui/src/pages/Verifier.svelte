@@ -1,6 +1,6 @@
 <script>
   import { onMount } from "svelte";
-  import { ethers, keccak256 } from "ethers";
+  import { ethers, keccak256, toUtf8Bytes } from "ethers";
   import { CERT_REGISTRY_ABI } from "../lib/abi";
 
   let studentID = "";
@@ -24,7 +24,7 @@
     return typeof v === "string" ? v : ethers.hexlify(v);
   }
 
-  function buildMessageObject(gpaValue, credentialId) {
+  function buildBaseInfo(gpaValue, credentialId) {
     return {
       studentID,
       FirstName,
@@ -101,7 +101,7 @@
         throw new Error("Requires local mode with VITE_PRIVATE_KEY available.");
       }
 
-      // Recompute credentialId
+      // Recompute credentialId exactly as issuer
       const FullName = `${FirstName} ${LastName}`;
       const credentialId = ethers.solidityPackedKeccak256(["string", "string"], [studentID, FullName]);
 
@@ -109,30 +109,69 @@
       const rec = await getOnchainRecord(credentialId);
       const onchainHash = rec.contentHash.toLowerCase();
 
-      // Re-sign locally with the institution private key
+      // status checks
+      let active = true;
+      let revoked = false;
+
+      if (typeof contract.isActive === "function") {
+        try {
+          active = await contract.isActive(credentialId);
+        } catch {}
+      }
+
+      if (typeof rec.revokedAt === "number") {
+        revoked = rec.revokedAt > 0;
+      }
+
+      if (typeof rec.status === "number") {
+        // treat anything other than 1 as non-active
+        active = active && rec.status === 1;
+      }
+
+      // If revoked or not active, fail immediately, no need to hash
+      if (revoked || !active) {
+        const details = [`credentialId: ${credentialId}`, revoked ? `Revoked at: ${rec.revokedAt}` : `Status: ${rec.status} (not active)`, "Invalid, certificate is revoked!"];
+        result = {
+          ok: false,
+          details,
+          onchain: {
+            issuer: rec.issuer,
+            cid: rec.cid,
+            status: rec.status,
+            issuedAt: rec.issuedAt,
+            revokedAt: rec.revokedAt,
+          },
+        };
+        loading = false;
+        return;
+      }
+
       const signer = new ethers.Wallet(PRIVATE_KEY, provider);
 
+      // Try GPA as number and as string
       const candidates = [];
       const gpaNumber = !isNaN(Number(gpa)) ? Number(gpa) : null;
-      if (gpaNumber !== null) {
-        candidates.push(JSON.stringify(buildMessageObject(gpaNumber, credentialId)));
-      }
-      candidates.push(JSON.stringify(buildMessageObject(gpa, credentialId)));
+      if (gpaNumber !== null) candidates.push(gpaNumber);
+      candidates.push(gpa);
 
-      let matchedSig = null;
-      const attempts = [];
-      for (const msg of candidates) {
-        const sig = await signMessageJson(msg, signer);
-        const sigHash = keccak256(sig).toLowerCase();
-        // attempts.push(`Tried GPA=${JSON.parse(msg).gpa} → keccak256(sig)=${sigHash}`);
-        if (sigHash === onchainHash) {
-          matchedSig = sig;
+      let matched = false;
+
+      for (const g of candidates) {
+        const base = buildBaseInfo(g, credentialId);
+        const baseJson = JSON.stringify(base);
+        const signature = await signMessageJson(baseJson, signer);
+        const full = { ...base, signature };
+        const fullJson = JSON.stringify(full);
+        const localHash = keccak256(toUtf8Bytes(fullJson)).toLowerCase();
+
+        if (localHash === onchainHash) {
+          matched = true;
           break;
         }
       }
 
-      const ok = !!matchedSig;
-      const details = [`credentialId: ${credentialId}`, `on-chain contentHash: ${onchainHash}`, ...attempts, ok ? "Match: YES" : "Match: NO"];
+      const ok = matched;
+      const details = [`credentialId: ${credentialId}`, `on-chain contentHash: ${onchainHash}`, ok ? "Match: YES" : "Match: NO"];
 
       result = {
         ok,

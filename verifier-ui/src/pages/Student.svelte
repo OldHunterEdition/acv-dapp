@@ -4,7 +4,7 @@
   let cid = "";
   let FirstName = "";
   let LastName = "";
-  let gpa = 4.0;
+  let gpa = "";
   let program = "";
   let institution = "";
   let credID = "";
@@ -79,29 +79,32 @@
     width: 800px;
     margin: 40px auto;
     padding: 40px;
-    border: 10px solid #2c3e50;
+    border: 10px solid #1e3a8a;
     border-radius: 15px;
-    background: #fdfdfd;
+    background: #0b2a6f;
+    color: #ffffff;
     text-align: center;
     font-family: "Georgia", serif;
-    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
+    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.35);
   }
 
   .student-name {
     font-size: 2rem;
     margin: 15px 0;
     font-weight: bold;
-    color: #34495e;
+    color: #ffffff;
   }
 
   .program-name {
     font-size: 1.5rem;
     margin: 10px 0 20px 0;
+    color: #dbeafe;
   }
 
   .credID {
     margin-top: 30px;
     font-style: italic;
+    color: #e5e7eb;
   }
 
   .signature {
@@ -109,9 +112,10 @@
   }
 
   .signature-line {
-    max-width: 900px; /* sets maximum width */
-    white-space: normal; /* allows wrapping (default behavior) */
-    word-wrap: break-word; /* ensures long words or URLs break correctly */
+    max-width: 900px;
+    white-space: normal;
+    word-wrap: break-word;
+    color: #f1f5f9;
   }
 
   .not-found {

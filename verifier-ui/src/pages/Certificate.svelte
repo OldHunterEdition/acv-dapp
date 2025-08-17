@@ -14,23 +14,14 @@
   }
 </script>
 
-<main
-  style="max-width: 820px; margin: 2rem auto; font-family: system-ui, sans-serif; text-align:left;"
->
+<main style="max-width: 820px; margin: 2rem auto; font-family: system-ui, sans-serif; text-align:left;">
+  <h2 style="margin:0 0 1rem 0;">Certificate Generator</h2>
   <div style="display:grid; gap:0.75rem; margin:1rem 0;">
     <label>
       cid:
-      <input
-        bind:value={cid}
-        placeholder="0x.."
-        style="width:100%; padding:0.5rem;"
-      />
+      <input bind:value={cid} placeholder="0x.." style="width:100%; padding:0.5rem;" />
     </label>
-    <button
-      on:click={generateCertificateLink}
-      disabled={loading}
-      style="padding:0.6em 1rem;"
-    >
+    <button on:click={generateCertificateLink} disabled={loading} style="padding:0.6em 1rem;">
       {loading ? "Generating" : "Generate"}
     </button>
     {#if qrcodeDataUrl}

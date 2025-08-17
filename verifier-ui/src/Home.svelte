@@ -1,7 +1,7 @@
 <script>
   import Verifier from "./pages/Verifier.svelte";
   import University from "./pages/University.svelte";
-  import RevokePage from "./pages/RevokePage.svelte";
+  import RevokePage from "./pages/Revoke.svelte";
   import Certificate from "./pages/Certificate.svelte";
 
   let currentPage = "university"; // default page
