@@ -31,9 +31,7 @@
               method: "wallet_switchEthereumChain",
               params: [{ chainId: "0x" + chainId.toString(16) }],
             });
-          } catch (_) {
-            /* ignored */
-          }
+          } catch (_) {}
         }
         return p;
       }
@@ -45,10 +43,7 @@
     loading = true;
     try {
       const FullName = `${FirstName} ${LastName}`;
-      const credentialId = ethers.solidityPackedKeccak256(
-        ["string", "string"],
-        [studentID, FullName]
-      );
+      const credentialId = ethers.solidityPackedKeccak256(["string", "string"], [studentID, FullName]);
 
       const certificate_info = {
         studentID,
@@ -64,9 +59,7 @@
       if (import.meta.env.VITE_BLOCKCHAIN_NETWORK == "local") {
         signer = new ethers.Wallet(import.meta.env.VITE_PRIVATE_KEY, provider);
       } else {
-        throw new Error(
-          "Issuing currently supported in local mode only in this UI."
-        );
+        throw new Error("Issuing currently supported in local mode only in this UI.");
       }
 
       const domain = {
@@ -90,21 +83,13 @@
       };
       const signature = await signer.signTypedData(domain, types, value);
 
-      // Attach signature, pin to Pinata to obtain CID
       certificate_info.signature = signature;
       const res = await pinata.upload.public.json(certificate_info);
 
-      // Store on-chain: contentHash = keccak256(signature)
       const cid = res.cid;
-      const contentHash = keccak256(
-        toUtf8Bytes(JSON.stringify(certificate_info))
-      );
+      const contentHash = keccak256(toUtf8Bytes(JSON.stringify(certificate_info)));
 
-      const write = new ethers.Contract(
-        import.meta.env.VITE_CONTRACT_ADDRESS,
-        CERT_REGISTRY_ABI,
-        signer
-      );
+      const write = new ethers.Contract(import.meta.env.VITE_CONTRACT_ADDRESS, CERT_REGISTRY_ABI, signer);
 
       await write.issue(credentialId, cid, contentHash, {
         gasLimit: 30_000_000,
@@ -122,32 +107,20 @@
     provider = await getProvider();
     const code = await provider.getCode(import.meta.env.VITE_CONTRACT_ADDRESS);
     if (!code || code === "0x") {
-      throw new Error(
-        "No contract deployed at this address on the current chain."
-      );
+      throw new Error("No contract deployed at this address on the current chain.");
     }
-    contract = new ethers.Contract(
-      import.meta.env.VITE_CONTRACT_ADDRESS,
-      CERT_REGISTRY_ABI,
-      provider
-    );
+    contract = new ethers.Contract(import.meta.env.VITE_CONTRACT_ADDRESS, CERT_REGISTRY_ABI, provider);
     pinata = new PinataSDK({ pinataJwt: import.meta.env.VITE_PINATA_JWT });
   });
 </script>
 
-<main
-  style="max-width: 820px; margin: 2rem auto; font-family: system-ui, sans-serif; text-align:left;"
->
+<main style="max-width: 820px; margin: 2rem auto; font-family: system-ui, sans-serif; text-align:left;">
   <h2 style="margin:0 0 1rem 0;">Issue Student Credential</h2>
 
   <div style="display:grid; gap:0.75rem; margin:1rem 0;">
     <label style="display:grid; gap:0.35rem; font-weight:600;">
       Student ID
-      <input
-        bind:value={studentID}
-        placeholder="e.g. S123456"
-        style="width:100%; padding:0.5rem;"
-      />
+      <input bind:value={studentID} placeholder="e.g. S123456" style="width:100%; padding:0.5rem;" />
     </label>
 
     <label style="display:grid; gap:0.35rem; font-weight:600;">
