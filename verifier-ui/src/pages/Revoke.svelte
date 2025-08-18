@@ -1,13 +1,17 @@
 <script>
-  import { onMount } from "svelte";
   import { ethers } from "ethers";
   import { CERT_REGISTRY_ABI } from "../lib/abi";
 
-  let studentID = "";
-  let FirstName = "";
-  let LastName = "";
-  let reason = "";
   let account = "";
+
+  let fields = [
+    {
+      studentID: "",
+      FirstName: "",
+      LastName: "",
+      reason: "",
+    },
+  ];
 
   let provider;
   let contract;
@@ -20,7 +24,7 @@
   const PRIVATE_KEY = import.meta.env.VITE_PRIVATE_KEY;
 
   async function getProvider() {
-    if (NETWORK_KIND == "local") {
+    if (import.meta.env.VITE_BLOCKCHAIN_NETWORK == "local") {
       return new ethers.JsonRpcProvider("http://127.0.0.1:8545");
     } else {
       const eth = typeof window !== "undefined" ? window["ethereum"] : null;
@@ -80,48 +84,24 @@
   async function revoke() {
     loading = true;
     result = null;
+
+    let certIds = [];
+    let reasons = [];
+
+    // create  signer
+    let signer;
+    if (import.meta.env.VITE_BLOCKCHAIN_NETWORK == "local") {
+      signer = new ethers.Wallet(import.meta.env.VITE_PRIVATE_KEY, provider);
+    } else {
+      signer = await provider.getSigner();
+    }
+
     try {
-      // validations
-      if (!studentID || !FirstName || !LastName) {
-        throw new Error("Fill Student ID, First Name, and Last Name.");
-      }
-      if (!reason.trim()) {
-        throw new Error("Please provide a revoke reason.");
-      }
-      if (!(NETWORK_KIND == "local" && PRIVATE_KEY)) {
-        throw new Error("Revoking requires local mode with VITE_PRIVATE_KEY.");
-      }
-
-      const certId = makeCertId(studentID, FirstName, LastName);
-
-      // create  signer
-      let signer;
-      if (import.meta.env.VITE_BLOCKCHAIN_NETWORK == "local") {
-        signer = new ethers.Wallet(import.meta.env.VITE_PRIVATE_KEY, provider);
-      } else {
-        signer = await provider.getSigner();
-      }
-
       // check contract deployed & create contract instance
       const code = await provider.getCode(CONTRACT_ADDR);
       if (!code || code === "0x")
         throw new Error("No contract at VITE_CONTRACT_ADDRESS on this chain.");
       contract = new ethers.Contract(CONTRACT_ADDR, CERT_REGISTRY_ABI, signer);
-
-      // current status
-      const existsActive = await contract.isActive(certId);
-      const statusBefore = await contract.statusOf(certId);
-      if (!existsActive) {
-        result = {
-          ok: false,
-          details: [
-            `certId: ${certId}`,
-            `Status before: ${statusBefore} (not active)`,
-            "Nothing to revoke (already revoked or never issued).",
-          ],
-        };
-        return;
-      }
 
       // signer must have ISSUER_ROLE
       const issuerRole = await contract.ISSUER_ROLE();
@@ -133,27 +113,58 @@
         );
       }
 
+      // validations
+      for (const field of fields) {
+        if (!field.studentID || !field.FirstName || !field.LastName) {
+          throw new Error("Fill Student ID, First Name, and Last Name.");
+        }
+
+        if (!field.reason.trim()) {
+          throw new Error("Please provide a revoke reason.");
+        }
+
+        const certId = makeCertId(
+          field.studentID,
+          field.FirstName,
+          field.LastName
+        );
+
+        // current status
+        const existsActive = await contract.isActive(certId);
+        const statusBefore = await contract.statusOf(certId);
+
+        if (!existsActive) {
+          result = {
+            ok: false,
+            details: [
+              `certId: ${certId}`,
+              `Status before: ${statusBefore} (not active)`,
+              "Nothing to revoke (already revoked or never issued).",
+            ],
+          };
+          return;
+        }
+
+        // add reasons & credentialIDs
+        certIds.push(certId);
+        reasons.push(field.reason);
+      }
+
       // send tx
-      const tx = await contract.revoke(certId, reason /* string */, {
+      const tx = await contract.batchRevoke(certIds, reasons, {
         gasLimit: 500_000,
       });
       const rcpt = await tx.wait();
-
-      // read status after
-      const statusAfter = await contract.statusOf(certId);
-      const isActiveAfter = await contract.isActive(certId);
+      console.log(`certIDs: ${JSON.stringify(certIds)}`);
+      console.log(`reasons: ${JSON.stringify(reasons)}`);
 
       result = {
-        ok: rcpt?.status === 1 && !isActiveAfter,
+        ok: rcpt?.status === 1,
         txHash: tx.hash,
-        statusAfter: Number(statusAfter),
-        isActiveAfter,
         details: [
-          `certId: ${certId}`,
+          `certId: ${certIds}`,
           `Tx hash: ${tx.hash}`,
-          `Revoke reason: ${reason}`,
-          `Status after: ${statusAfter}`,
-          `Active after revoke: ${isActiveAfter ? "YES" : "NO"}`,
+          `Revoke reasons: ${reasons}`,
         ],
       };
     } catch (e) {
@@ -168,6 +179,24 @@
     const signer = await provider.getSigner();
     account = await signer.getAddress();
   }
+
+  function addField() {
+    fields = [
+      ...fields,
+      {
+        studentID: "",
+        FirstName: "",
+        LastName: "",
+        reason: "",
+      },
+    ];
+  }
+
+  function removeFields() {
+    if (fields.length > 0) {
+      fields = fields.slice(0, -1);
+    }
+  }
 </script>
 
 <main
@@ -181,27 +210,47 @@
   <h2 style="margin:0 0 1rem 0;">Revoke Certificate</h2>
 
   <div style="display:grid; gap:0.75rem; margin:1rem 0;">
-    <label style="display:grid; gap:0.35rem; font-weight:600;">
-      Student ID
-      <input
-        bind:value={studentID}
-        placeholder="e.g. S123456"
-        style="width:100%; padding:0.5rem;"
-      />
-    </label>
-    <label style="display:grid; gap:0.35rem; font-weight:600;">
-      First Name
-      <input bind:value={FirstName} style="width:100%; padding:0.5rem;" />
-    </label>
-    <label style="display:grid; gap:0.35rem; font-weight:600;">
-      Last Name
-      <input bind:value={LastName} style="width:100%; padding:0.5rem;" />
-    </label>
-    <label style="display:grid; gap:0.35rem; font-weight:600;">
-      Reason
-      <input bind:value={reason} style="width:100%; padding:0.5rem;" />
-    </label>
+    <ul class="field-list">
+      {#each fields as field}
+        <li class="field-item">
+          <label style="display:grid; gap:0.35rem; font-weight:600;">
+            Student ID
+            <input
+              bind:value={field.studentID}
+              placeholder="e.g. S123456"
+              style="width:100%; padding:0.5rem;"
+            />
+          </label>
 
+          <label style="display:grid; gap:0.35rem; font-weight:600;">
+            First Name
+            <input
+              bind:value={field.FirstName}
+              style="width:100%; padding:0.5rem;"
+            />
+          </label>
+
+          <label style="display:grid; gap:0.35rem; font-weight:600;">
+            Last Name
+            <input
+              bind:value={field.LastName}
+              style="width:100%; padding:0.5rem;"
+            />
+          </label>
+
+          <label style="display:grid; gap:0.35rem; font-weight:600;">
+            Reason
+            <input
+              bind:value={field.reason}
+              style="width:100%; padding:0.5rem;"
+            />
+          </label>
+        </li>
+      {/each}
+    </ul>
+
+    <button type="button" on:click={addField}>+ Add field</button>
+    <button type="button" on:click={removeFields}>remove last field</button>
     <button on:click={revoke} disabled={loading} style="padding:0.6em 1rem;">
       {loading ? "Revoking…" : "Revoke"}
     </button>
@@ -228,3 +277,18 @@
     </section>
   {/if}
 </main>
+
+<style>
+  .field-list {
+    list-style: none;
+    padding: 0;
+    display: grid;
+    gap: 1rem;
+  }
+  .field-item {
+    border: 1px solid #ddd;
+    padding: 0.75rem;
+    border-radius: 0.75rem;
+    background: #fafafa;
+  }
+</style>
