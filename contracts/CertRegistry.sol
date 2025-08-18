@@ -6,6 +6,7 @@ import "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
 
 contract CertRegistry is AccessControl {
     using ECDSA for bytes32;
+
     bytes32 public constant ISSUER_ROLE = keccak256("ISSUER_ROLE");
 
     bytes32 private immutable DOMAIN_SEPARATOR;
@@ -58,34 +59,53 @@ contract CertRegistry is AccessControl {
         );
     }
 
+    // Single Issue
+
     function issue(
         bytes32 certId,
         string calldata cid,
         bytes32 contentHash
     ) external onlyRole(ISSUER_ROLE) {
-        require(certs[certId].status == Status.None, "exists");
-        certs[certId] = Cert(
-            msg.sender,
-            cid,
-            contentHash,
-            uint64(block.timestamp),
-            0,
-            Status.Active
-        );
-        emit Issued(certId, msg.sender, cid, contentHash);
+        _issue(certId, cid, contentHash, msg.sender);
     }
 
     function revoke(bytes32 certId, string calldata reason) external {
-        Cert storage c = certs[certId];
-        require(c.status == Status.Active, "not active");
-        require(
-            hasRole(ISSUER_ROLE, msg.sender) && msg.sender == c.issuer,
-            "only issuer"
-        );
-        c.status = Status.Revoked;
-        c.revokedAt = uint64(block.timestamp);
-        emit Revoked(certId, msg.sender, reason);
+        _revoke(certId, reason, msg.sender);
     }
+
+    // Batch Issue
+
+    function batchIssue(
+        bytes32[] calldata certIds,
+        string[] calldata cids,
+        bytes32[] calldata contentHashes
+    ) external onlyRole(ISSUER_ROLE) {
+        require(certIds.length == cids.length, "length mismatch");
+        require(cids.length == contentHashes.length, "length mismatch");
+
+        for (uint256 i = 0; i < certIds.length; ) {
+            _issue(certIds[i], cids[i], contentHashes[i], msg.sender);
+            unchecked {
+                ++i;
+            }
+        }
+    }
+
+    function batchRevoke(
+        bytes32[] calldata certIds,
+        string[] calldata reasons
+    ) external {
+        require(certIds.length == reasons.length, "length mismatch");
+
+        for (uint256 i = 0; i < certIds.length; ) {
+            _revoke(certIds[i], reasons[i], msg.sender);
+            unchecked {
+                ++i;
+            }
+        }
+    }
+
+    // Views
 
     function get(bytes32 certId) external view returns (Cert memory) {
         return certs[certId];
@@ -112,5 +132,41 @@ contract CertRegistry is AccessControl {
             abi.encodePacked("\x19\x01", DOMAIN_SEPARATOR, structHash)
         );
         return digest.recover(signature) == signer;
+    }
+
+    // helpers
+
+    function _issue(
+        bytes32 certId,
+        string calldata cid,
+        bytes32 contentHash,
+        address issuer
+    ) internal {
+        require(certs[certId].status == Status.None, "exists");
+        certs[certId] = Cert(
+            issuer,
+            cid,
+            contentHash,
+            uint64(block.timestamp),
+            0,
+            Status.Active
+        );
+        emit Issued(certId, issuer, cid, contentHash);
+    }
+
+    function _revoke(
+        bytes32 certId,
+        string calldata reason,
+        address caller
+    ) internal {
+        Cert storage c = certs[certId];
+        require(c.status == Status.Active, "not active");
+        require(
+            hasRole(ISSUER_ROLE, caller) && caller == c.issuer,
+            "only issuer"
+        );
+        c.status = Status.Revoked;
+        c.revokedAt = uint64(block.timestamp);
+        emit Revoked(certId, caller, reason);
     }
 }
