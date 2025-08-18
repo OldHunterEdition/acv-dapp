@@ -69,10 +69,7 @@
     loading = true;
     try {
       const FullName = `${FirstName} ${LastName}`;
-      const credentialId = ethers.solidityPackedKeccak256(
-        ["string", "string"],
-        [studentID, FullName]
-      );
+      const credentialId = ethers.solidityPackedKeccak256(["string", "string"], [studentID, FullName]);
 
       const certificate_info = {
         studentID,
@@ -91,13 +88,9 @@
         signer = await provider.getSigner();
       }
 
-      const code = await provider.getCode(
-        import.meta.env.VITE_CONTRACT_ADDRESS
-      );
+      const code = await provider.getCode(import.meta.env.VITE_CONTRACT_ADDRESS);
       if (!code || code === "0x") {
-        throw new Error(
-          "No contract deployed at this address on the current chain."
-        );
+        throw new Error("No contract deployed at this address on the current chain.");
       }
       const domain = {
         name: "CredentialChecker",
@@ -125,20 +118,13 @@
       const res = await pinata.upload.public.json(certificate_info);
 
       const cid = res.cid;
-      const contentHash = keccak256(
-        toUtf8Bytes(JSON.stringify(certificate_info))
-      );
+      const contentHash = keccak256(toUtf8Bytes(JSON.stringify(certificate_info)));
 
-      const write = new ethers.Contract(
-        import.meta.env.VITE_CONTRACT_ADDRESS,
-        CERT_REGISTRY_ABI,
-        signer
-      );
+      const write = new ethers.Contract(import.meta.env.VITE_CONTRACT_ADDRESS, CERT_REGISTRY_ABI, signer);
 
-      await write.issue(credentialId, cid, contentHash, {
-        gasLimit: 30_000_000,
-      });
-      console.log("Issued:", { credentialId, cid, contentHash });
+      // Use batchIssue with single-element arrays
+      await write.batchIssue([credentialId], [cid], [contentHash], { gasLimit: 30_000_000 });
+      console.log("Batch issued (1 item):", { credentialId, cid, contentHash });
     } catch (e) {
       console.error(e);
       alert(e?.message || String(e));
@@ -158,9 +144,7 @@
   });
 </script>
 
-<main
-  style="max-width: 820px; margin: 2rem auto; font-family: system-ui, sans-serif; text-align:left;"
->
+<main style="max-width: 820px; margin: 2rem auto; font-family: system-ui, sans-serif; text-align:left;">
   {#if account}
     <p>Connected Wallet: {account}</p>
   {:else}
@@ -171,11 +155,7 @@
   <div style="display:grid; gap:0.75rem; margin:1rem 0;">
     <label style="display:grid; gap:0.35rem; font-weight:600;">
       Student ID
-      <input
-        bind:value={studentID}
-        placeholder="e.g. S123456"
-        style="width:100%; padding:0.5rem;"
-      />
+      <input bind:value={studentID} placeholder="e.g. S123456" style="width:100%; padding:0.5rem;" />
     </label>
 
     <label style="display:grid; gap:0.35rem; font-weight:600;">

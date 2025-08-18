@@ -1,9 +1,0 @@
-{
-  "schema": "edu.cert.v1",
-  "name": "Bachelor of Science",
-  "institution": "Example University",
-  "program": "Computer Science",
-  "dateIssued": "2025-06-01",
-  "file": "certificate.pdf",
-  "hash": "0x287f131639a15f68be26505c6b1d682e7604db674e209fb708ac2dc14e631af0"
-}

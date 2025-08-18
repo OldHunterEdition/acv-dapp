@@ -110,27 +110,17 @@
       const onchainHash = rec.contentHash.toLowerCase();
 
       // status checks
-      let active = true;
-      let revoked = false;
+      const revoked = rec.status === 2 || rec.revokedAt > 0; // Status.Revoked = 2
+      const active = rec.status === 1; // Status.Active = 1
 
-      if (typeof contract.isActive === "function") {
-        try {
-          active = await contract.isActive(credentialId);
-        } catch {}
-      }
-
-      if (typeof rec.revokedAt === "number") {
-        revoked = rec.revokedAt > 0;
-      }
-
-      if (typeof rec.status === "number") {
-        // treat anything other than 1 as non-active
-        active = active && rec.status === 1;
-      }
-
-      // If revoked or not active, fail immediately, no need to hash
+      // If revoked or not active, fail immediately, but show the correct reason
       if (revoked || !active) {
-        const details = [`credentialId: ${credentialId}`, revoked ? `Revoked at: ${rec.revokedAt}` : `Status: ${rec.status} (not active)`, "Invalid, certificate is revoked!"];
+        const statusNames = { 0: "None", 1: "Active", 2: "Revoked" };
+        const details = [
+          `credentialId: ${credentialId}`,
+          revoked ? `Revoked at: ${rec.revokedAt}` : `Status: ${rec.status} (${statusNames[rec.status] ?? "Unknown"})`,
+          revoked ? "Invalid: certificate is revoked." : "Invalid: certificate is not active.",
+        ];
         result = {
           ok: false,
           details,
@@ -252,7 +242,10 @@
           {#if result.onchain.cid}
             <div><strong>CID:</strong> {result.onchain.cid}</div>
           {/if}
-          <div><strong>Status:</strong> {result.onchain.status}</div>
+          <div>
+            <strong>Status:</strong>
+            {["None", "Active", "Revoked"][result.onchain.status] ?? result.onchain.status}
+          </div>
         </div>
       {/if}
 
