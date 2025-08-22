@@ -15,11 +15,7 @@
   let contract;
   let loading = false;
   let result = null;
-
-  const EXPECTED_CHAIN_ID = 1337;
-  const CONTRACT_ADDR = import.meta.env.VITE_CONTRACT_ADDRESS;
-  const NETWORK_KIND = import.meta.env.VITE_BLOCKCHAIN_NETWORK;
-  const PRIVATE_KEY = import.meta.env.VITE_PRIVATE_KEY;
+  let chainID;
 
   function toHex(v) {
     return typeof v === "string" ? v : ethers.hexlify(v);
@@ -37,26 +33,10 @@
     };
   }
 
-  async function getProvider() {
-    if (NETWORK_KIND == "local") {
-      return new ethers.JsonRpcProvider("http://127.0.0.1:8545");
-    } else {
-      const eth = typeof window !== "undefined" ? window["ethereum"] : null;
-      if (eth) {
-        const p = new ethers.BrowserProvider(eth);
-        const net = await p.getNetwork();
-        const need = EXPECTED_CHAIN_ID;
-        if (need && Number(net.chainId) !== Number(need)) {
-          try {
-            await eth.request({
-              method: "wallet_switchEthereumChain",
-              params: [{ chainId: "0x" + need.toString(16) }],
-            });
-          } catch (_) {}
-        }
-        return p;
-      }
-      throw new Error("No RPC or wallet found.");
+  async function getProvider(eth) {
+    if (eth) {
+      const p = new ethers.BrowserProvider(eth);
+      return p;
     }
   }
 
@@ -131,8 +111,6 @@
         return;
       }
 
-      const signer = new ethers.Wallet(PRIVATE_KEY, provider);
-
       // Try GPA as number and as string
       const candidates = [];
       const gpaNumber = !isNaN(Number(gpa)) ? Number(gpa) : null;
@@ -179,12 +157,38 @@
   }
 
   onMount(async () => {
-    provider = await getProvider();
-    const code = await provider.getCode(CONTRACT_ADDR);
+    const eth = typeof window !== "undefined" ? window["ethereum"] : null;
+    provider = await getProvider(eth);
+    chainID = Number((await provider.getNetwork()).chainId);
+    const code = await provider.getCode(
+      chainID === 11155111
+        ? import.meta.env.VITE_CONTRACT_ADDRESS
+        : import.meta.env.VITE_LOCAL_CONTRACT_ADDRESS
+    );
     if (!code || code === "0x") {
-      throw new Error("No contract deployed at this address on the current chain.");
+      throw new Error(
+        "No contract deployed at this address on the current chain."
+      );
     }
-    contract = new ethers.Contract(CONTRACT_ADDR, CERT_REGISTRY_ABI, provider);
+    contract = new ethers.Contract(
+      chainID === 11155111
+        ? import.meta.env.VITE_CONTRACT_ADDRESS
+        : import.meta.env.VITE_LOCAL_CONTRACT_ADDRESS,
+      CERT_REGISTRY_ABI,
+      provider
+    );
+    eth.on("chainChanged", (chainId) => {
+      // window.location.reload();
+      provider = new ethers.BrowserProvider(window["ethereum"]);
+      chainID = Number(chainId);
+      contract = new ethers.Contract(
+        chainID === 11155111
+          ? import.meta.env.VITE_CONTRACT_ADDRESS
+          : import.meta.env.VITE_LOCAL_CONTRACT_ADDRESS,
+        CERT_REGISTRY_ABI,
+        provider
+      );
+    });
   });
 </script>
 

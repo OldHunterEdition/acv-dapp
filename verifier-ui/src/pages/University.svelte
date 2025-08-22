@@ -18,73 +18,35 @@
   let provider;
   let pinata;
   let loading = false;
+  let isConnected = false;
+  let chainID;
   let account = "";
 
-  async function getProvider() {
-    if (import.meta.env.VITE_BLOCKCHAIN_NETWORK == "local") {
-      return new ethers.JsonRpcProvider("http://127.0.0.1:8545");
-    } else {
-      const eth = typeof window !== "undefined" ? window["ethereum"] : null;
-      if (eth) {
-        const p = new ethers.BrowserProvider(eth);
-        const net = await p.getNetwork();
-        const chainId = 11155111;
-        if (chainId && Number(net.chainId) !== Number(chainId)) {
-          try {
-            await eth.request({
-              method: "wallet_switchEthereumChain",
-              params: [{ chainId: "0x" + chainId.toString(16) }],
-            });
-          } catch (err) {
-            /* ignored */
-            if (err.code === 4902) {
-              await eth.request({
-                method: "wallet_addEthereumChain",
-                params: [
-                  {
-                    chainId: "0xaa36a7",
-                    chainName: "Sepolia Testnet",
-                    nativeCurrency: {
-                      name: "SepoliaETH",
-                      symbol: "ETH",
-                      decimals: 18,
-                    },
-                    rpcUrls: ["https://sepolia.infura.io/v3/YOUR_INFURA_KEY"],
-                    blockExplorerUrls: ["https://sepolia.etherscan.io/"],
-                  },
-                ],
-              });
-            }
-          }
-        }
-        eth.on("accountsChanged", (accounts) => {
-          console.log(`accounts: ${accounts}`);
-
-          account = accounts[0] || "";
-        });
-        eth.on("chainChanged", () => window.location.reload());
-        return p;
-      }
-      throw new Error("No RPC or wallet found.");
+  async function getProvider(eth) {
+    if (eth) {
+      const p = new ethers.BrowserProvider(eth);
+      return p;
     }
   }
 
   async function issue() {
+    if (!isConnected) {
+      window.alert("Connect to wallet first");
+      return;
+    }
     loading = true;
     let credentialIds = [];
     let cids = [];
     let contentHashes = [];
 
-    let signer;
-    if (import.meta.env.VITE_BLOCKCHAIN_NETWORK == "local") {
-      signer = new ethers.Wallet(import.meta.env.VITE_PRIVATE_KEY, provider);
-    } else {
-      signer = await provider.getSigner();
-    }
+    let signer = await provider.getSigner();
     const signerAddress = await signer.getAddress();
-    console.log(`signerAddress: ${signerAddress}`);
 
-    const code = await provider.getCode(import.meta.env.VITE_CONTRACT_ADDRESS);
+    const code = await provider.getCode(
+      chainID === 11155111
+        ? import.meta.env.VITE_CONTRACT_ADDRESS
+        : import.meta.env.VITE_LOCAL_CONTRACT_ADDRESS
+    );
     if (!code || code === "0x") {
       throw new Error(
         "No contract deployed at this address on the current chain."
@@ -145,11 +107,10 @@
         contentHashes.push(contentHash);
       }
 
-      console.log(
-        `credentialIDs: ${JSON.stringify(credentialIds)}, ${JSON.stringify(cids)}, ${JSON.stringify(contentHashes)}}`
-      );
       const write = new ethers.Contract(
-        import.meta.env.VITE_CONTRACT_ADDRESS,
+        chainID === 11155111
+          ? import.meta.env.VITE_CONTRACT_ADDRESS
+          : import.meta.env.VITE_LOCAL_CONTRACT_ADDRESS,
         CERT_REGISTRY_ABI,
         signer
       );
@@ -177,9 +138,20 @@
   }
 
   async function connectWallet() {
-    provider = await getProvider();
+    const eth = typeof window !== "undefined" ? window["ethereum"] : null;
+    provider = await getProvider(eth);
     const signer = await provider.getSigner();
     account = await signer.getAddress();
+    chainID = Number((await provider.getNetwork()).chainId);
+    isConnected = true;
+    eth.on("accountsChanged", (accounts) => {
+      account = accounts[0] || "";
+    });
+    eth.on("chainChanged", (chainId) => {
+      // window.location.reload();
+      provider = new ethers.BrowserProvider(window["ethereum"]);
+      chainID = Number(chainId);
+    });
   }
 
   function addField() {
@@ -212,6 +184,7 @@
 >
   {#if account}
     <p>Connected Wallet: {account}</p>
+    <p>chainId: {chainID}</p>
   {:else}
     <button on:click={connectWallet}>Connect Wallet</button>
   {/if}
