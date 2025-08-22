@@ -9,6 +9,7 @@
   let program = "";
   let institution = "";
   let gpa = "";
+  let signature = "";
 
   let provider;
   let contract;
@@ -32,7 +33,7 @@
       program,
       institution,
       gpa: gpaValue,
-      credentialId,
+      credentialID: credentialId,
     };
   }
 
@@ -71,39 +72,29 @@
     };
   }
 
-  async function signMessageJson(jsonStr, signer) {
-    const net = await provider.getNetwork();
-    const domain = {
-      name: "CredentialChecker",
-      version: "1",
-      chainId: net.chainId,
-      verifyingContract: CONTRACT_ADDR,
-    };
-    const types = {
-      Verify: [
-        { name: "signer", type: "address" },
-        { name: "message", type: "string" },
-      ],
-    };
-    const signerAddr = await signer.getAddress();
-    const value = { signer: signerAddr, message: jsonStr };
-    return signer.signTypedData(domain, types, value);
-  }
-
   async function verify() {
     loading = true;
     result = null;
     try {
-      if (!studentID || !FirstName || !LastName || !program || !institution || gpa === "") {
-        throw new Error("Please fill all fields: Student ID, First/Last Name, Program, Institution, GPA.");
-      }
-      if (!(NETWORK_KIND == "local" && PRIVATE_KEY)) {
-        throw new Error("Requires local mode with VITE_PRIVATE_KEY available.");
+      if (
+        !studentID ||
+        !FirstName ||
+        !LastName ||
+        !program ||
+        !institution ||
+        gpa === ""
+      ) {
+        throw new Error(
+          "Please fill all fields: Student ID, First/Last Name, Program, Institution, GPA."
+        );
       }
 
       // Recompute credentialId exactly as issuer
       const FullName = `${FirstName} ${LastName}`;
-      const credentialId = ethers.solidityPackedKeccak256(["string", "string"], [studentID, FullName]);
+      const credentialId = ethers.solidityPackedKeccak256(
+        ["string", "string"],
+        [studentID, FullName]
+      );
 
       // Read on-chain record
       const rec = await getOnchainRecord(credentialId);
@@ -118,8 +109,12 @@
         const statusNames = { 0: "None", 1: "Active", 2: "Revoked" };
         const details = [
           `credentialId: ${credentialId}`,
-          revoked ? `Revoked at: ${rec.revokedAt}` : `Status: ${rec.status} (${statusNames[rec.status] ?? "Unknown"})`,
-          revoked ? "Invalid: certificate is revoked." : "Invalid: certificate is not active.",
+          revoked
+            ? `Revoked at: ${rec.revokedAt}`
+            : `Status: ${rec.status} (${statusNames[rec.status] ?? "Unknown"})`,
+          revoked
+            ? "Invalid: certificate is revoked."
+            : "Invalid: certificate is not active.",
         ];
         result = {
           ok: false,
@@ -141,15 +136,13 @@
       // Try GPA as number and as string
       const candidates = [];
       const gpaNumber = !isNaN(Number(gpa)) ? Number(gpa) : null;
-      if (gpaNumber !== null) candidates.push(gpaNumber);
-      candidates.push(gpa);
+      if (gpaNumber !== null) candidates.push(gpa);
 
       let matched = false;
-
+      let baseJson;
       for (const g of candidates) {
         const base = buildBaseInfo(g, credentialId);
-        const baseJson = JSON.stringify(base);
-        const signature = await signMessageJson(baseJson, signer);
+        baseJson = JSON.stringify(base);
         const full = { ...base, signature };
         const fullJson = JSON.stringify(full);
         const localHash = keccak256(toUtf8Bytes(fullJson)).toLowerCase();
@@ -160,8 +153,12 @@
         }
       }
 
-      const ok = matched;
-      const details = [`credentialId: ${credentialId}`, `on-chain contentHash: ${onchainHash}`, ok ? "Match: YES" : "Match: NO"];
+      const ok = await contract.verify(rec.issuer, baseJson, signature);
+      const details = [
+        `credentialId: ${credentialId}`,
+        `on-chain contentHash: ${onchainHash}`,
+        ok ? "Match: YES" : "Match: NO",
+      ];
 
       result = {
         ok,
@@ -191,13 +188,20 @@
   });
 </script>
 
-<main style="max-width: 820px; margin: 2rem auto; font-family: system-ui, sans-serif; text-align:left;">
+<main
+  style="max-width: 820px; margin: 2rem auto; font-family: system-ui, sans-serif; text-align:left;"
+>
+  <p>chainId: {chainID}</p>
   <h2 style="margin:0 0 1rem 0;">Verify Student Credential</h2>
 
   <div style="display:grid; gap:0.75rem; margin:1rem 0;">
     <label style="display:grid; gap:0.35rem; font-weight:600;">
       Student ID
-      <input bind:value={studentID} placeholder="e.g. S123456" style="width:100%; padding:0.5rem;" />
+      <input
+        bind:value={studentID}
+        placeholder="e.g. S123456"
+        style="width:100%; padding:0.5rem;"
+      />
     </label>
 
     <label style="display:grid; gap:0.35rem; font-weight:600;">
@@ -225,13 +229,20 @@
       <input bind:value={gpa} style="width:100%; padding:0.5rem;" />
     </label>
 
+    <label style="display:grid; gap:0.35rem; font-weight:600;">
+      Signature
+      <input bind:value={signature} style="width:100%; padding:0.5rem;" />
+    </label>
+
     <button on:click={verify} disabled={loading} style="padding:0.6em 1rem;">
       {loading ? "Verifying…" : "Verify"}
     </button>
   </div>
 
   {#if result}
-    <section style="border-radius:12px; padding:1rem; margin-top:1rem; border:1px solid #333; background:#000; color:#fff; text-align:left;">
+    <section
+      style="border-radius:12px; padding:1rem; margin-top:1rem; border:1px solid #333; background:#000; color:#fff; text-align:left;"
+    >
       <h3 style="margin:0 0 0.5rem 0;">
         {result.ok ? "✅ Valid credential" : "❌ Verification failed"}
       </h3>
@@ -244,7 +255,8 @@
           {/if}
           <div>
             <strong>Status:</strong>
-            {["None", "Active", "Revoked"][result.onchain.status] ?? result.onchain.status}
+            {["None", "Active", "Revoked"][result.onchain.status] ??
+              result.onchain.status}
           </div>
         </div>
       {/if}
