@@ -57,7 +57,10 @@
       name: "CredentialChecker",
       version: "1",
       chainId: (await provider.getNetwork()).chainId,
-      verifyingContract: import.meta.env.VITE_CONTRACT_ADDRESS,
+      verifyingContract:
+        chainID === 11155111
+          ? import.meta.env.VITE_CONTRACT_ADDRESS
+          : import.meta.env.VITE_LOCAL_CONTRACT_ADDRESS,
     };
 
     const types = {
